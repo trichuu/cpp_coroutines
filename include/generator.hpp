@@ -1,3 +1,4 @@
+#include <type_traits>
 #pragma ocne
 #include <coroutine>
 #include <optional>
@@ -15,7 +16,7 @@ public:
 
     promise_type() noexcept = default;
     ~promise_type() noexcept = default;
-    promise_type(promise_type&&) noexcept = default;
+    promise_type(promise_type &&) noexcept = default;
 
     std::suspend_always initial_suspend() noexcept { return {}; }
     std::suspend_always final_suspend() noexcept { return {}; }
@@ -119,6 +120,27 @@ public:
       } else {
         break;
       }
+    }
+  }
+  template <typename F> std::optional<T> reduce(F f) {
+    auto val{this->next()};
+    if (!val) {
+      return std::nullopt;
+    }
+    auto ret{*val};
+    while (auto opt{this->next()}) {
+      ret = f(ret, *opt);
+    }
+    return std::make_optional(ret);
+  }
+  template <typename R, typename F>
+  FunctionalGenerator<R> scan(R initial, F f) {
+    auto prom{std::move(*this)};
+    co_await std::suspend_always{};
+    R val{std::move(initial)};
+    while (auto opt{prom.next()}) {
+      val = f(val, *opt);
+      co_yield val;
     }
   }
 };
@@ -237,6 +259,27 @@ public:
       } else {
         break;
       }
+    }
+  }
+  template <typename F> std::optional<T> reduce(F f) {
+    auto val{this->next()};
+    if (!val) {
+      return std::nullopt;
+    }
+    auto ret{*val};
+    while (auto opt{this->next()}) {
+      ret = f(ret, *opt);
+    }
+    return std::make_optional(ret);
+  }
+  template <typename R, typename F>
+  FunctionalGenerator<R> scan(R initial, F f) {
+    auto prom{std::move(*this)};
+    co_await std::suspend_always{};
+    R val{std::move(initial)};
+    while (auto opt{prom.next()}) {
+      val = f(val, *opt);
+      co_yield val;
     }
   }
 };

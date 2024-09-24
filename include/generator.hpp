@@ -95,8 +95,9 @@ public:
   template <typename R, typename F> R fold(R initial_val, F f) {
     R ret{std::move(initial_val)};
     while (auto opt{this->next()}) {
-      ret = F(ret, *opt);
+      ret = f(ret, *opt);
     }
+    return ret;
   }
   FunctionalGenerator<T> take(std::size_t n) {
     auto prom{std::move(*this)};
@@ -214,7 +215,7 @@ public:
     while (auto opt{this->next()}) {
       ret = f(ret, *opt);
     }
-    return std::move(ret);
+    return ret;
   }
   FunctionalGenerator<T> take(std::size_t n) {
     auto prom{std::move(*this)};

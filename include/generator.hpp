@@ -1,12 +1,9 @@
-#include <type_traits>
 #pragma ocne
 #include <coroutine>
 #include <optional>
 #include <utility>
 
 namespace cocos {
-template <typename T> class FunctionalGenerator;
-
 template <typename T> class Generator {
 public:
   struct promise_type {
@@ -71,22 +68,21 @@ public:
     std::destroy_at(&(this->prom_handle.promise().value));
     return std::make_optional(std::move(val));
   }
-  template <typename F>
-  FunctionalGenerator<std::invoke_result_t<F, T &>> map(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      co_yield f(*opt);
-    }
-  }
-  template <typename F> FunctionalGenerator<T> filter(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (f(*opt)) {
-        co_yield *opt;
+  template <typename F> Generator<std::invoke_result_t<F, T &>> map(F f) {
+    return [](Generator<T> g, F f) -> Generator<std::invoke_result_t<F, T &>> {
+      while (auto opt{g.next()}) {
+        co_yield f(*opt);
       }
-    }
+    }(std::move(*this), std::move(f));
+  }
+  template <typename F> Generator<T> filter(F f) {
+    return [](Generator<T> g, F f) -> Generator<T> {
+      while (auto opt{g.next()}) {
+        if (f(*opt)) {
+          co_yield *opt;
+        }
+      }
+    }(std::move(*this), std::move(f));
   }
   template <typename F> void for_each(F f) {
     while (auto opt{this->next()}) {
@@ -100,27 +96,27 @@ public:
     }
     return ret;
   }
-  FunctionalGenerator<T> take(std::size_t n) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (n == 0) {
-        break;
-      }
-      n -= 1;
-      co_yield *opt;
-    }
-  }
-  template <typename F> FunctionalGenerator<T> take_while(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (f(*opt) == true) {
+  Generator<T> take(std::size_t n) {
+    return [](Generator<T> prom, std::size_t n) -> Generator<T> {
+      while (auto opt{prom.next()}) {
+        if (n == 0) {
+          break;
+        }
+        n -= 1;
         co_yield *opt;
-      } else {
-        break;
       }
-    }
+    }(std::move(*this), n);
+  }
+  template <typename F> Generator<T> take_while(F f) {
+    return [](Generator<T> prom, F f) -> Generator<T> {
+      while (auto opt{prom.next()}) {
+        if (f(*opt) == true) {
+          co_yield *opt;
+        } else {
+          break;
+        }
+      }
+    }(std::move(*this), std::move(f));
   }
   template <typename F> std::optional<T> reduce(F f) {
     auto val{this->next()};
@@ -133,154 +129,14 @@ public:
     }
     return std::make_optional(ret);
   }
-  template <typename R, typename F>
-  FunctionalGenerator<R> scan(R initial, F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    R val{std::move(initial)};
-    while (auto opt{prom.next()}) {
-      val = f(val, *opt);
-      co_yield val;
-    }
-  }
-};
-
-template <typename T>
-class FunctionalGenerator { // bisically the same as Generator, except for
-                            // initial_suspend
-public:
-  struct promise_type {
-    union {
-      T value{};
-    };
-
-    std::suspend_never initial_suspend() noexcept {
-      return {};
-    } // to make sure original generator move immediately after
-      // FunctionalGenerator constructed.
-    std::suspend_always final_suspend() noexcept { return {}; }
-    FunctionalGenerator<T> get_return_object() {
-      return FunctionalGenerator<T>(
-          std::coroutine_handle<promise_type>::from_promise(*this));
-    }
-    void unhandled_exception() { throw; }
-    template <typename U> std::suspend_always yield_value(U &&val) {
-      std::construct_at(&(this->value), std::forward<U>(val));
-      return {};
-    }
-    void return_void() {}
-  };
-
-private:
-  std::coroutine_handle<promise_type> prom_handle;
-
-private:
-  FunctionalGenerator() = default;
-  explicit FunctionalGenerator(std::coroutine_handle<promise_type> handle)
-      : prom_handle(handle) {}
-
-public:
-  FunctionalGenerator(const FunctionalGenerator &) = delete;
-  FunctionalGenerator(FunctionalGenerator &&other) noexcept
-      : prom_handle(std::exchange(other.prom_handle,
-                                  std::coroutine_handle<promise_type>{})) {}
-  auto operator=(const FunctionalGenerator &) = delete;
-  FunctionalGenerator &operator=(FunctionalGenerator &&other) noexcept {
-    std::destroy_at(this);
-    std::construct_at(this, std::move(other));
-  }
-
-public:
-  ~FunctionalGenerator() {
-    if (this->prom_handle) {
-      this->prom_handle.destroy();
-    }
-  }
-
-public:
-  std::optional<T> next() {
-    if (this->prom_handle.done()) {
-      return std::nullopt;
-    }
-    this->prom_handle.resume();
-    if (this->prom_handle.done()) {
-      return std::nullopt;
-    }
-    T val = std::move(this->prom_handle.promise().value);
-    std::destroy_at(&(this->prom_handle.promise().value));
-    return std::make_optional(std::move(val));
-  }
-  template <typename F>
-  FunctionalGenerator<std::invoke_result_t<F, T &>> map(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      co_yield f(*opt);
-    }
-  }
-  template <typename F> FunctionalGenerator<T> filter(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (f(*opt)) {
-        co_yield *opt;
+  template <typename R, typename F> Generator<R> scan(R initial, F f) {
+    return [](Generator<T> prom, R initial, F f) -> Generator<R> {
+      R val{std::move(initial)};
+      while (auto opt{prom.next()}) {
+        val = f(val, *opt);
+        co_yield val;
       }
-    }
-  }
-  template <typename F> void for_each(F f) {
-    while (auto opt{this->next()}) {
-      f(*opt);
-    }
-  }
-  template <typename R, typename F> R fold(R initial_val, F f) {
-    R ret{std::move(initial_val)};
-    while (auto opt{this->next()}) {
-      ret = f(ret, *opt);
-    }
-    return ret;
-  }
-  FunctionalGenerator<T> take(std::size_t n) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (n == 0) {
-        break;
-      }
-      n -= 1;
-      co_yield *opt;
-    }
-  }
-  template <typename F> FunctionalGenerator<T> take_while(F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    while (auto opt{prom.next()}) {
-      if (f(*opt) == true) {
-        co_yield *opt;
-      } else {
-        break;
-      }
-    }
-  }
-  template <typename F> std::optional<T> reduce(F f) {
-    auto val{this->next()};
-    if (!val) {
-      return std::nullopt;
-    }
-    auto ret{*val};
-    while (auto opt{this->next()}) {
-      ret = f(ret, *opt);
-    }
-    return std::make_optional(ret);
-  }
-  template <typename R, typename F>
-  FunctionalGenerator<R> scan(R initial, F f) {
-    auto prom{std::move(*this)};
-    co_await std::suspend_always{};
-    R val{std::move(initial)};
-    while (auto opt{prom.next()}) {
-      val = f(val, *opt);
-      co_yield val;
-    }
+    }(std::move(*this), std::move(initial), std::move(f));
   }
 };
 } // namespace cocos

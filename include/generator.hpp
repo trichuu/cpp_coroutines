@@ -13,7 +13,7 @@ public:
 
     promise_type() noexcept = default;
     ~promise_type() noexcept = default;
-    promise_type(promise_type &&) noexcept = default;
+    promise_type(promise_type &&) noexcept = delete;
 
     std::suspend_always initial_suspend() noexcept { return {}; }
     std::suspend_always final_suspend() noexcept { return {}; }
@@ -110,7 +110,7 @@ public:
   template <typename F> Generator<T> take_while(F f) {
     return [](Generator<T> prom, F f) -> Generator<T> {
       while (auto opt{prom.next()}) {
-        if (f(*opt) == true) {
+        if (f(*opt)) {
           co_yield *opt;
         } else {
           break;

@@ -16,4 +16,9 @@ int main() {
     std::cout << *opt << std::endl;
   }
   std::cout << "\n";
+  auto gg = range_int(0, 10)
+                .take_while([](int i) { return i < 8; })
+                .map([](int &i) { return i * 3; })
+                .fold(0, [](int acc, int val) { return acc + val; });
+  std::cout << gg << "\n";
 }

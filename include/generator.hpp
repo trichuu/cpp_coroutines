@@ -2,6 +2,7 @@
 #include <coroutine>
 #include <optional>
 #include <utility>
+#include <ranges>
 
 namespace cocos {
 template <typename T> class Generator {
@@ -56,6 +57,18 @@ public:
   }
 
 public:
+  template <typename Iter>
+  static Generator<T> from_iterator(Iter begin, Iter end) {
+    for (auto iter{begin}; iter != end; ++iter) {
+      co_yield *iter;
+    }
+  }
+  template <typename R> static Generator<T> from_range(R &&range) {
+    auto r{std::forward<R>(range)};
+    return from_iterator(std::ranges::begin(r), std::ranges::end(r));
+  }
+
+public:
   /**
    * @brief returns the next element of the genrator, if there's no more
    * element, nullopt will be returned.
@@ -90,8 +103,9 @@ public:
     }(std::move(*this), std::move(f));
   }
   /**
-   * @brief filter the elements uisng `f` as the predicate. only if elements where `f(elem)` is `true` will be generated.
-   * 
+   * @brief filter the elements uisng `f` as the predicate. only if elements
+   * where `f(elem)` is `true` will be generated.
+   *
    * @tparam F the type of predicate function
    * @param f predicate function.
    * @return Generator<T> the new generator, into which `*this` is moved into.
@@ -106,10 +120,11 @@ public:
     }(std::move(*this), std::move(f));
   }
   /**
-   * @brief traverse the elements from the generator. the original generator will be consumed.
-   * 
-   * @tparam F 
-   * @param f 
+   * @brief traverse the elements from the generator. the original generator
+   * will be consumed.
+   *
+   * @tparam F
+   * @param f
    */
   template <typename F> void for_each(F f) {
     while (auto opt{this->next()}) {
@@ -118,11 +133,12 @@ public:
   }
   /**
    * @brief fold the element sequence into one value.
-   * 
+   *
    * @tparam R return type
    * @tparam F the type of aggregate function.
-   * @param initial_val 
-   * @param f the aggregate function, whose first argument is the current value, and the second is the next value.
+   * @param initial_val
+   * @param f the aggregate function, whose first argument is the current value,
+   * and the second is the next value.
    * @return R the final value.
    */
   template <typename R, typename F> R fold(R initial_val, F f) {
@@ -133,10 +149,12 @@ public:
     return ret;
   }
   /**
-   * @brief take the first n elements of the generator. the rest is not to be evaluated.
-   * 
+   * @brief take the first n elements of the generator. the rest is not to be
+   * evaluated.
+   *
    * @param n the count you need.
-   * @return Generator<T> the generator that generates the first n elements, into which the original generator is moved.
+   * @return Generator<T> the generator that generates the first n elements,
+   * into which the original generator is moved.
    */
   Generator<T> take(std::size_t n) {
     return [](Generator<T> prom, std::size_t n) -> Generator<T> {
@@ -150,11 +168,13 @@ public:
     }(std::move(*this), n);
   }
   /**
-   * @brief similar to take(), but using the given predicate, until `f(elem)` is false.
-   * 
+   * @brief similar to take(), but using the given predicate, until `f(elem)` is
+   * false.
+   *
    * @tparam F the type of the predicate.
    * @param f the predicate.
-   * @return Generator<T> the generator of elements, into which the original generator is moved.
+   * @return Generator<T> the generator of elements, into which the original
+   * generator is moved.
    */
   template <typename F> Generator<T> take_while(F f) {
     return [](Generator<T> prom, F f) -> Generator<T> {
@@ -168,10 +188,12 @@ public:
     }(std::move(*this), std::move(f));
   }
   /**
-   * @brief reduce the element sequence into one value. similar to fold, but using the first value of the generator as the initial value.
-   * 
+   * @brief reduce the element sequence into one value. similar to fold, but
+   * using the first value of the generator as the initial value.
+   *
    * @tparam F the type of the aggregate function.
-   * @param f the aggregate function, whose first argument is the current value and the second is the next value of the generator.
+   * @param f the aggregate function, whose first argument is the current value
+   * and the second is the next value of the generator.
    * @return std::optional<T> nullopt if the generator is empty.
    */
   template <typename F> std::optional<T> reduce(F f) {
@@ -186,13 +208,15 @@ public:
     return std::make_optional(ret);
   }
   /**
-   * @brief silimar to fold, but generates the each intermediate result rather than returns the final value.
-   * 
+   * @brief silimar to fold, but generates the each intermediate result rather
+   * than returns the final value.
+   *
    * @tparam R the result type
    * @tparam F the aggregate function.
    * @param initial the initial value.
    * @param f the aggregate function.
-   * @return Generator<R> the generator that genetates each intermediate result while folding.
+   * @return Generator<R> the generator that genetates each intermediate result
+   * while folding.
    */
   template <typename R, typename F> Generator<R> scan(R initial, F f) {
     return [](Generator<T> prom, R initial, F f) -> Generator<R> {

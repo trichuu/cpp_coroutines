@@ -1,4 +1,4 @@
-#include "../include/generator.hpp"
+#include "../include/generator_legacy.hpp"
 #include <iostream>
 cocos::Generator<int> range_int(int start, int end) {
   for (int num{start}; num < end; ++num) {
@@ -8,8 +8,7 @@ cocos::Generator<int> range_int(int start, int end) {
 
 int main() {
   auto g{range_int(0, 10)};
-  while (g.move_next()) {
-    std::cout << g.current_value() << " ";
+  while (auto opt{g.next()}) {
+    std::cout << *opt << '\n';
   }
-  std::cout << "\n";
 }

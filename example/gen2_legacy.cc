@@ -1,4 +1,4 @@
-#include "../include/generator.hpp"
+#include "../include/generator_legacy.hpp"
 #include <iostream>
 
 cocos::Generator<int> range_int(int start, int end) {
@@ -12,8 +12,8 @@ int main() {
                .filter([](int i) { return i % 2 == 0; })
                .map([](int i) { return i * i; })
                .take(3);
-  while (g.move_next()) {
-    std::cout << g.current_value() << std::endl;
+  while (auto opt{g.next()}) {
+    std::cout << *opt << std::endl;
   }
   auto gg = range_int(0, 10)
                 .take_while([](int i) { return i < 8; })

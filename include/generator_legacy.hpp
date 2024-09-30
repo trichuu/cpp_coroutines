@@ -1,106 +1,62 @@
-#pragma once
+#pragma ocne
 #include <coroutine>
-#include <exception>
-#include <ranges>
+#include <optional>
 #include <utility>
-#include <variant>
+#include <ranges>
+
 namespace cocos {
-template <typename T> class Generator;
-
-template <typename T> struct GeneratorPromise {
-  std::variant<std::monostate, T, std::exception_ptr> result;
-
-  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
-  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
-  Generator<T> get_return_object() {
-    return Generator{
-        std::coroutine_handle<GeneratorPromise>::from_promise(*this)};
-  }
-  void unhandled_exception() {
-    this->result.template emplace<std::exception_ptr>(std::current_exception());
-  }
-  template <typename U> std::suspend_always yield_value(U &&val) {
-    this->result.template emplace<T>(std::forward<U>(val));
-    return {};
-  }
-  T &get_or_throw() {
-    auto p{std::get_if<T>(&(this->result))};
-    if (p) {
-      return *p;
-    } else {
-      std::rethrow_exception(std::get<2>(this->result));
-    }
-  }
-};
-/**
- * @brief A lazily evaluating generator.
- *
- * @tparam T The type to be generated.
- */
 template <typename T> class Generator {
 public:
-  using promise_type = GeneratorPromise<T>;
-  using Self = Generator;
+  struct promise_type {
+    union {
+      T value{};
+    };
+
+    promise_type() noexcept = default;
+    ~promise_type() noexcept = default;
+    promise_type(promise_type &&) noexcept = delete;
+
+    std::suspend_always initial_suspend() noexcept { return {}; }
+    std::suspend_always final_suspend() noexcept { return {}; }
+    Generator<T> get_return_object() {
+      return Generator<T>(
+          std::coroutine_handle<promise_type>::from_promise(*this));
+    }
+    void unhandled_exception() { throw; }
+    template <typename U> std::suspend_always yield_value(U &&val) {
+      std::construct_at(&(this->value), std::forward<U>(val));
+      return {};
+    }
+    void return_void() {}
+  };
 
 private:
-  using THandle = std::coroutine_handle<promise_type>;
+  std::coroutine_handle<promise_type> prom_handle;
+
+private:
+  Generator() = default;
+  explicit Generator(std::coroutine_handle<promise_type> handle)
+      : prom_handle(handle) {}
 
 public:
-  /**
-   * @brief construct a Generator with no underlying coroutine.
-   *
-   */
-  constexpr Generator() : co_handle{} {}
-  /**
-   * @brief Construct a new Generator object, with the underlying coroutine
-   * represented by `handle`.
-   *
-   * @param handle The underlying coroutine of the generator.
-   */
-  explicit Generator(THandle handle) : co_handle{handle} {}
-  /**
-   * @brief Each generator has an exclusive ownership of the undelying
-   * coroutine. So that copy construction is deleted.
-   *
-   */
-  Generator(const Self &) = delete;
-  Generator(Self &&other) : co_handle{std::exchange(other.co_handle, {})} {}
-  /**
-   * @brief The same reason as deleted copy constructor.
-   *
-   * @return auto
-   */
-  auto operator=(const Self &) = delete;
-  Self &operator=(Self &&other) {
-    Self tmp{};
-    tmp.swap(other);
-    this->swap(other);
-    return *this;
+  Generator(const Generator &) = delete;
+  Generator(Generator &&other) noexcept
+      : prom_handle(std::exchange(other.prom_handle,
+                                  std::coroutine_handle<promise_type>{})) {}
+  auto operator=(const Generator &) = delete;
+  Generator &operator=(Generator &&other) noexcept {
+    std::destroy_at(this);
+    std::construct_at(this, std::move(other));
   }
-  /**
-   * @brief Destroy the underlying coroutine.
-   *
-   */
+
+public:
   ~Generator() {
-    if (this->co_handle) {
-      this->co_handle.destroy();
+    if (this->prom_handle) {
+      this->prom_handle.destroy();
     }
   }
-  void swap(Self &other) { std::swap(this->co_handle, other.co_handle); }
-  bool has_coroutine() const noexcept { return this->co_handle; }
 
 public:
-  /**
-   * @brief Move comuse generator to yield next value.
-   *
-   * @return true if there is a next value.
-   * @return false if there is not a naxt value.
-   */
-  bool move_next() {
-    this->co_handle.resume();
-    return !(this->co_handle.done());
-  }
-  T &current_value() { return this->co_handle.promise().get_or_throw(); }
   template <typename Iter>
   static Generator<T> from_iterator(Iter begin, Iter end) {
     for (auto iter{begin}; iter != end; ++iter) {
@@ -110,6 +66,26 @@ public:
   template <typename R> static Generator<T> from_range(R &&range) {
     auto r{std::forward<R>(range)};
     return from_iterator(std::ranges::begin(r), std::ranges::end(r));
+  }
+
+public:
+  /**
+   * @brief returns the next element of the genrator, if there's no more
+   * element, nullopt will be returned.
+   *
+   * @return std::optional<T>
+   */
+  std::optional<T> next() {
+    if (this->prom_handle.done()) {
+      return std::nullopt;
+    }
+    this->prom_handle.resume();
+    if (this->prom_handle.done()) {
+      return std::nullopt;
+    }
+    T val = std::move(this->prom_handle.promise().value);
+    std::destroy_at(&(this->prom_handle.promise().value));
+    return std::make_optional(std::move(val));
   }
   /**
    * @brief Mapping each element into another value using the function f.
@@ -121,8 +97,8 @@ public:
    */
   template <typename F> Generator<std::invoke_result_t<F, T &>> map(F f) {
     return [](Generator<T> g, F f) -> Generator<std::invoke_result_t<F, T &>> {
-      while (g.move_next()) {
-        co_yield g.current_value();
+      while (auto opt{g.next()}) {
+        co_yield f(*opt);
       }
     }(std::move(*this), std::move(f));
   }
@@ -136,9 +112,9 @@ public:
    */
   template <typename F> Generator<T> filter(F f) {
     return [](Generator<T> g, F f) -> Generator<T> {
-      while (g.move_next()) {
-        if (f(g.current_value())) {
-          co_yield g.current_value();
+      while (auto opt{g.next()}) {
+        if (f(*opt)) {
+          co_yield *opt;
         }
       }
     }(std::move(*this), std::move(f));
@@ -151,8 +127,8 @@ public:
    * @param f
    */
   template <typename F> void for_each(F f) {
-    while (this->move_next()) {
-      f(this->current_value());
+    while (auto opt{this->next()}) {
+      f(*opt);
     }
   }
   /**
@@ -167,8 +143,8 @@ public:
    */
   template <typename R, typename F> R fold(R initial_val, F f) {
     R ret{std::move(initial_val)};
-    while (this->move_next()) {
-      ret = f(ret, this->current_value());
+    while (auto opt{this->next()}) {
+      ret = f(ret, *opt);
     }
     return ret;
   }
@@ -182,12 +158,12 @@ public:
    */
   Generator<T> take(std::size_t n) {
     return [](Generator<T> prom, std::size_t n) -> Generator<T> {
-      while (prom.move_next()) {
+      while (auto opt{prom.next()}) {
         if (n == 0) {
           break;
         }
         n -= 1;
-        co_yield prom.current_value();
+        co_yield *opt;
       }
     }(std::move(*this), n);
   }
@@ -202,9 +178,9 @@ public:
    */
   template <typename F> Generator<T> take_while(F f) {
     return [](Generator<T> prom, F f) -> Generator<T> {
-      while (prom.move_next()) {
-        if (f(prom.current_value())) {
-          co_yield prom.current_value();
+      while (auto opt{prom.next()}) {
+        if (f(*opt)) {
+          co_yield *opt;
         } else {
           break;
         }
@@ -218,18 +194,18 @@ public:
    * @tparam F the type of the aggregate function.
    * @param f the aggregate function, whose first argument is the current value
    * and the second is the next value of the generator.
-   * `NOTE`: each value is moved into `f`.
    * @return std::optional<T> nullopt if the generator is empty.
    */
   template <typename F> std::optional<T> reduce(F f) {
-    if (!this->move_next()) {
+    auto val{this->next()};
+    if (!val) {
       return std::nullopt;
     }
-    auto val{std::move(this->current_value())};
-    while (this->move_next()) {
-      val = f(val, std::move(this->current_value()));
+    auto ret{*val};
+    while (auto opt{this->next()}) {
+      ret = f(ret, *opt);
     }
-    return std::make_optional(val);
+    return std::make_optional(ret);
   }
   /**
    * @brief silimar to fold, but generates the each intermediate result rather
@@ -245,14 +221,11 @@ public:
   template <typename R, typename F> Generator<R> scan(R initial, F f) {
     return [](Generator<T> prom, R initial, F f) -> Generator<R> {
       R val{std::move(initial)};
-      while (prom.move_next()) {
-        val = f(val, prom.current_value());
+      while (auto opt{prom.next()}) {
+        val = f(val, *opt);
         co_yield val;
       }
     }(std::move(*this), std::move(initial), std::move(f));
   }
-
-private:
-  std::coroutine_handle<promise_type> co_handle;
 };
 } // namespace cocos

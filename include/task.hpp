@@ -26,6 +26,7 @@ template <typename T> struct TaskAwaiter {
 
 template <> class Task<void> {
   friend struct TaskAwaiter<void>;
+  friend class EventLoop;
 
 public:
   using promise_type = TaskPromise<void>;
@@ -53,8 +54,7 @@ public:
 
 public:
   void wait(); // impl see below
-  std::coroutine_handle<> get_handle() const noexcept { return this->co_hdl; }
-  
+
   template <typename F> Task<std::invoke_result_t<F>> then(F f) {
     using U = std::invoke_result_t<F>;
     return [](Task<> t, F f) -> Task<U> {
@@ -89,6 +89,7 @@ private:
 
 template <typename T> class Task {
   friend struct TaskAwaiter<T>;
+  friend class EventLoop;
 
 public:
   using promise_type = TaskPromise<T>;
@@ -121,7 +122,6 @@ public:
     }
     return std::move(this->co_hdl.promise().get());
   }
-  std::coroutine_handle<> get_handle() const noexcept { return this->co_hdl; }
 
   template <typename F> Task<std::invoke_result_t<F, T &>> then(F f) {
     using U = std::invoke_result_t<F, T &>;

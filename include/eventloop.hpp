@@ -26,6 +26,9 @@ class EventLoop {
 
 public:
   void add_task(Coro handle) { tasks.push_back(handle); }
+  template <typename T> void add_task(const Task<T> &task) {
+    tasks.push_back(task.co_hdl);
+  }
   void
   add_delayed_task(Coro handle,
                    std::chrono::time_point<std::chrono::steady_clock> delay) {

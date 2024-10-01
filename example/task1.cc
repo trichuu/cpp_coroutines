@@ -26,8 +26,8 @@ int main() {
   auto t1 = task1();
   auto t2 = task2();
   auto now = std::chrono::steady_clock::now();
-  loop.add_task(t1.get_handle());
-  loop.add_task(t2.get_handle());
+  loop.add_task(t1);
+  loop.add_task(t2);
   loop.run();
   auto dur = std::chrono::steady_clock::now() - now;
   print("Total time: {}\n", dur);

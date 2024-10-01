@@ -4,6 +4,7 @@
 #include <ranges>
 #include <utility>
 #include <variant>
+#include <optional>
 namespace cocos {
 template <typename T> class Generator;
 
@@ -122,7 +123,7 @@ public:
   template <typename F> Generator<std::invoke_result_t<F, T &>> map(F f) {
     return [](Generator<T> g, F f) -> Generator<std::invoke_result_t<F, T &>> {
       while (g.move_next()) {
-        co_yield g.current_value();
+        co_yield f(g.current_value());
       }
     }(std::move(*this), std::move(f));
   }

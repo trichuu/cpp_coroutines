@@ -3,7 +3,7 @@
 namespace cocos::concepts {
 template <typename A>
 concept Awaiter = requires(A a) {
-  { a.await_ready() } -> std::same_as<bool>;
+  { a.await_ready() } -> std::convertible_to<bool>;
   a.await_suspend();
   a.await_resume();
 };

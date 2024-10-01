@@ -42,7 +42,7 @@ public:
   }
   /**
    * @brief Delay a resuming of a coroutine, until the awake time.
-   * 
+   *
    * @param handle The delayed coroutine.
    * @param delay The awake time.
    */
@@ -53,7 +53,7 @@ public:
   }
   /**
    * @brief Run the event loop.
-   * 
+   *
    */
   void run() {
     while (!tasks.empty() || !delays.empty()) {
@@ -62,15 +62,14 @@ public:
         tasks.pop_front();
         task.resume();
         continue;
-      }
-      if (!delays.empty()) {
+      } else if (!delays.empty()) {
         auto delay = delays.top();
-        if (delay.awake_time <= std::chrono::steady_clock::now()) {
-          delays.pop();
-          delay.sleeping_coro.resume();
-        } else {
+        if (delay.awake_time > std::chrono::steady_clock::now()) {
           std::this_thread::sleep_until(delay.awake_time);
         }
+        delays.pop();
+        delay.sleeping_coro.resume();
+        continue;
       }
     }
   }

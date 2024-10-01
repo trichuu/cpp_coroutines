@@ -14,7 +14,7 @@ template <typename T> struct TaskAwaiter;
 
 template <typename T> struct TaskAwaiter {
   Task<T> task;
-
+  std::coroutine_handle<> waiting_coro;
   /**
    * @brief Since the task is lazy, it is never ready when it is first awaited.
    */
@@ -22,9 +22,9 @@ template <typename T> struct TaskAwaiter {
   /**
    * @brief Add the awaiting coroutine to the event loop.
    */
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<>) const noexcept {
-    EventLoop::get_loop().add_task(task.co_hdl);
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<> hdl) noexcept {
+    EventLoop::get_loop().add_task(task);
+    EventLoop::get_loop().add_task(hdl);
     return std::noop_coroutine();
   }
   /**
@@ -33,7 +33,8 @@ template <typename T> struct TaskAwaiter {
    *
    * @return T
    */
-  T await_resume() { return this->task.wait(); }
+  T await_resume() { 
+    return this->task.wait(); }
 };
 /**
  * @brief A specialization for Task<void>.
@@ -74,29 +75,29 @@ public:
 
   template <typename F> Task<std::invoke_result_t<F>> then(F f) {
     using U = std::invoke_result_t<F>;
-    return [](Task<> t, F f) -> Task<U> {
+    return [](Task<> t, F ff) -> Task<U> {
       try {
         co_await t;
-        co_return f();
+        co_return ff();
       } catch (...) {
         throw;
       }
     }(std::move(*this), std::move(f));
   }
   template <typename F> Task<> catching(F f) {
-    return [](Task<> t, F f) -> Task<> {
+    return [](Task<> t, F ff) -> Task<> {
       try {
         co_await t;
       } catch (...) {
-        f(std::current_exception());
+        ff(std::current_exception());
       }
       co_return;
     }(std::move(*this), std::move(f));
   }
   template <typename F> Task<> finally(F f) {
-    return [](Task<> t, F f) -> Task<> {
+    return [](Task<> t, F ff) -> Task<> {
       co_await t;
-      f();
+      ff();
     }(*this, std::move(f));
   }
 
@@ -148,29 +149,29 @@ public:
 
   template <typename F> Task<std::invoke_result_t<F, T &>> then(F f) {
     using U = std::invoke_result_t<F, T &>;
-    return [](Task<T> t, F f) -> Task<U> {
+    return [](Task<T> t, F ff) -> Task<U> {
       try {
         auto res{co_await t};
-        co_return f(res);
+        co_return ff(res);
       } catch (...) {
         throw;
       }
     }(std::move(*this), std::move(f));
   }
   template <typename F> Task<> catching(F f) {
-    return [](Task<T> t, F f) -> Task<> {
+    return [](Task<T> t, F ff) -> Task<> {
       try {
         co_await t;
       } catch (...) {
-        f(std::current_exception());
+        ff(std::current_exception());
       }
       co_return;
     }(std::move(*this), std::move(f));
   }
   template <typename F> Task<> finally(F f) {
-    return [](Task<T> t, F f) -> Task<> {
+    return [](Task<T> t, F ff) -> Task<> {
       co_await t;
-      f();
+      ff();
     }(*this, std::move(f));
   }
 
@@ -205,24 +206,24 @@ struct TaskPrimiseBase {
    * so it is moved into the awaiter.
    *
    */
-  template <typename T>
-  TaskAwaiter<T> await_transform(Task<T> &t) const noexcept {
-    return TaskAwaiter<T>{std::move(t)};
+  template <typename T> TaskAwaiter<T> await_transform(Task<T> &t) noexcept {
+    return TaskAwaiter<T>{std::move(t),
+                          std::coroutine_handle<>::from_address(this)};
   }
   /**
    * @brief The same as above, but for rvalue reference.
-   * 
+   *
    */
-  template <typename T>
-  TaskAwaiter<T> await_transform(Task<T> &&t) const noexcept {
-    return TaskAwaiter<T>{std::move(t)};
+  template <typename T> TaskAwaiter<T> await_transform(Task<T> &&t) noexcept {
+    return TaskAwaiter<T>{std::move(t),
+                          std::coroutine_handle<>::from_address(this)};
   }
 };
 
 template <> struct TaskPromise<void> : public TaskPrimiseBase {
   /**
    * @brief A task of void do not need to store the result.
-   * 
+   *
    */
   std::exception_ptr ep;
 
@@ -231,13 +232,13 @@ template <> struct TaskPromise<void> : public TaskPrimiseBase {
   }
   /**
    * @brief If exception happens, store it.
-   * 
+   *
    */
   void unhandled_exception() { this->ep = std::current_exception(); }
   void return_void() {}
   /**
    * @brief If exception happens, throw it.
-   * 
+   *
    */
   void get() {
     if (this->ep) {
@@ -248,8 +249,9 @@ template <> struct TaskPromise<void> : public TaskPrimiseBase {
 
 template <typename T> struct TaskPromise : public TaskPrimiseBase {
   /**
-   * @brief Either the result nor the exception is stored in the promise. Null exception_ptr represents unfinished coroutine.
-   * 
+   * @brief Either the result nor the exception is stored in the promise. Null
+   * exception_ptr represents unfinished coroutine.
+   *
    */
   std::variant<std::exception_ptr, T> result;
 
@@ -258,21 +260,21 @@ template <typename T> struct TaskPromise : public TaskPrimiseBase {
   }
   /**
    * @brief If exception happens, store it.
-   * 
+   *
    */
   void unhandled_exception() {
     this->result.template emplace<std::exception_ptr>(std::current_exception());
   }
   /**
    * @brief Store the result of the coroutine.
-   * 
+   *
    */
   template <typename U> void return_value(U &&value) {
     this->result.template emplace<T>(std::forward<U>(value));
   }
   /**
    * @brief Get the result or throw the exception happend in the coroutine.
-   * @return T 
+   * @return T
    */
   T get() {
     if (this->result.index() == 0 &&

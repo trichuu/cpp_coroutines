@@ -1,7 +1,8 @@
 #include "../include/sleep.hpp"
 #include "../include/task.hpp"
-#include <iostream>
 #include <format>
+#include <iostream>
+
 
 #define print(...) (std::cout << std::format(__VA_ARGS__))
 using namespace std::chrono_literals;
@@ -12,14 +13,14 @@ cocos::Task<> pstr(int num) {
 }
 
 cocos::Task<> throws() {
-  co_await pstr(1);
   co_await cocos::sleep(1s);
+  co_await pstr(1);
   throw std::runtime_error("This is an exception.");
 }
 
 cocos::Task<> just() {
-  co_await cocos::sleep(2s);
   co_await pstr(2);
+  co_await cocos::sleep(2s);
   co_return;
 }
 

@@ -110,7 +110,7 @@ public:
     return [](Task<> t, F ff) -> Task<> {
       co_await t;
       ff();
-    }(*this, std::move(f));
+    }(std::move(*this), std::move(f));
   }
 
 private:
@@ -185,7 +185,7 @@ public:
     return [](Task<T> t, F ff) -> Task<> {
       co_await t;
       ff();
-    }(*this, std::move(f));
+    }(std::move(*this), std::move(f));
   }
 
 public:

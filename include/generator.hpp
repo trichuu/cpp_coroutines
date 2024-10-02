@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_GENERATOR
+#define COCOS_GENERATOR
 #include <coroutine>
 #include <exception>
 #include <ranges>
@@ -257,3 +258,4 @@ private:
   std::coroutine_handle<promise_type> co_handle;
 };
 } // namespace cocos
+#endif // COCOS_GENERATOR

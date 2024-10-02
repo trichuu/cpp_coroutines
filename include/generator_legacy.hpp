@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_GENERATOR_LEGACY
+#define COCOS_GENERATOR_LEGACY
 #include <coroutine>
 #include <optional>
 #include <utility>
@@ -229,3 +230,4 @@ public:
   }
 };
 } // namespace cocos
+#endif // COCOS_GENERATOR_LEGACY

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_CONCEPTS
+#define COCOS_CONCEPTS
 #include <concepts>
 #include <coroutine>
 namespace cocos::concepts {
@@ -34,3 +35,4 @@ concept Awaitable = Awaiter<A> || requires(A a) {
   { operator co_await(static_cast<A &&>(a)) } -> Awaiter;
 };
 } // namespace cocos::concepts
+#endif // COCOS_CONCEPTS

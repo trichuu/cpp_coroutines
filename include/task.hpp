@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_TASK
+#define COCOS_TASK
 #include "coroutine_concepts.hpp"
 #include "eventloop.hpp"
 #include <algorithm>
@@ -52,8 +53,7 @@ template <typename T> struct TaskAwaiter {
 template <> class Task<void> {
   friend struct TaskAwaiter<void>;
   friend class EventLoop;
-  template<typename U>
-  friend struct TaskPromise;
+  template <typename U> friend struct TaskPromise;
 
 public:
   using promise_type = TaskPromise<void>;
@@ -120,8 +120,7 @@ private:
 template <typename T> class Task {
   friend struct TaskAwaiter<T>;
   friend class EventLoop;
-  template<typename U>
-  friend struct TaskPromise;
+  template <typename U> friend struct TaskPromise;
 
 public:
   using promise_type = TaskPromise<T>;
@@ -350,3 +349,4 @@ inline void Task<void>::wait() {
   this->co_hdl.promise().get();
 }
 } // namespace cocos
+#endif // COCOS_TASK

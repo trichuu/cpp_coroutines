@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_EVENTLOOP
+#define COCOS_EVENTLOOP
 #include <chrono>
 #include <coroutine>
 #include <deque>
@@ -84,3 +85,4 @@ public:
   }
 };
 } // namespace cocos
+#endif // COCOS_EVENTLOOP

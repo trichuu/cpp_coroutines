@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COCOS_SLEEP
+#define COCOS_SLEEP
 #include "eventloop.hpp"
 #include <chrono>
 #include <coroutine>
@@ -43,3 +44,4 @@ namespace cocos {
         return sleep_until(now() + duration);
     }
 }
+#endif // COCOS_SLEEP

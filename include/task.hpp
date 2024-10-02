@@ -1,6 +1,7 @@
 #pragma once
 #include "coroutine_concepts.hpp"
 #include "eventloop.hpp"
+#include <algorithm>
 #include <coroutine>
 #include <exception>
 #include <type_traits>
@@ -12,9 +13,20 @@ template <typename T = void> struct TaskPromise;
 template <typename T = void> class Task;
 template <typename T> struct TaskAwaiter;
 
+struct FinalAwaiter {
+  std::coroutine_handle<> prev_hdl;
+  bool await_ready() const noexcept { return false; }
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) noexcept {
+    if (this->prev_hdl) {
+      return this->prev_hdl;
+    }
+    return std::noop_coroutine();
+  }
+  void await_resume() const noexcept {}
+};
+
 template <typename T> struct TaskAwaiter {
   Task<T> task;
-  std::coroutine_handle<> waiting_coro;
   /**
    * @brief Since the task is lazy, it is never ready when it is first awaited.
    */
@@ -22,9 +34,8 @@ template <typename T> struct TaskAwaiter {
   /**
    * @brief Add the awaiting coroutine to the event loop.
    */
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<> hdl) noexcept {
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) noexcept {
     EventLoop::get_loop().add_task(task);
-    EventLoop::get_loop().add_task(hdl);
     return std::noop_coroutine();
   }
   /**
@@ -33,8 +44,7 @@ template <typename T> struct TaskAwaiter {
    *
    * @return T
    */
-  T await_resume() { 
-    return this->task.wait(); }
+  T await_resume() { return this->task.wait(); }
 };
 /**
  * @brief A specialization for Task<void>.
@@ -42,6 +52,8 @@ template <typename T> struct TaskAwaiter {
 template <> class Task<void> {
   friend struct TaskAwaiter<void>;
   friend class EventLoop;
+  template<typename U>
+  friend struct TaskPromise;
 
 public:
   using promise_type = TaskPromise<void>;
@@ -108,6 +120,8 @@ private:
 template <typename T> class Task {
   friend struct TaskAwaiter<T>;
   friend class EventLoop;
+  template<typename U>
+  friend struct TaskPromise;
 
 public:
   using promise_type = TaskPromise<T>;
@@ -175,11 +189,17 @@ public:
     }(*this, std::move(f));
   }
 
-private:
+public:
   THandle co_hdl;
 };
 
-struct TaskPrimiseBase {
+template <> struct TaskPromise<void> {
+  /**
+   * @brief A task of void do not need to store the result.
+   *
+   */
+  std::exception_ptr ep;
+  std::coroutine_handle<> prev_hdl{};
   /**
    * @brief Tasks are lazy, so they are not ready when they are first awaited.
    *
@@ -192,7 +212,7 @@ struct TaskPrimiseBase {
    *
    * @return std::suspend_always
    */
-  std::suspend_always final_suspend() const noexcept { return {}; }
+  FinalAwaiter final_suspend() const noexcept { return {prev_hdl}; }
   /**
    * @brief An awaiter needs no transformation.
    * @return A The very same awaiter.
@@ -207,26 +227,21 @@ struct TaskPrimiseBase {
    *
    */
   template <typename T> TaskAwaiter<T> await_transform(Task<T> &t) noexcept {
-    return TaskAwaiter<T>{std::move(t),
-                          std::coroutine_handle<>::from_address(this)};
+    auto task{std::move(t)};
+    task.co_hdl.promise().prev_hdl =
+        std::coroutine_handle<TaskPromise<void>>::from_promise(*this);
+    return TaskAwaiter<T>{std::move(task)};
   }
   /**
    * @brief The same as above, but for rvalue reference.
    *
    */
   template <typename T> TaskAwaiter<T> await_transform(Task<T> &&t) noexcept {
-    return TaskAwaiter<T>{std::move(t),
-                          std::coroutine_handle<>::from_address(this)};
+    auto task{std::move(t)};
+    task.co_hdl.promise().prev_hdl =
+        std::coroutine_handle<TaskPromise<void>>::from_promise(*this);
+    return TaskAwaiter<T>{std::move(task)};
   }
-};
-
-template <> struct TaskPromise<void> : public TaskPrimiseBase {
-  /**
-   * @brief A task of void do not need to store the result.
-   *
-   */
-  std::exception_ptr ep;
-
   Task<void> get_return_object() {
     return Task<void>{std::coroutine_handle<TaskPromise>::from_promise(*this)};
   }
@@ -247,14 +262,56 @@ template <> struct TaskPromise<void> : public TaskPrimiseBase {
   }
 };
 
-template <typename T> struct TaskPromise : public TaskPrimiseBase {
+template <typename T> struct TaskPromise {
   /**
    * @brief Either the result nor the exception is stored in the promise. Null
    * exception_ptr represents unfinished coroutine.
    *
    */
   std::variant<std::exception_ptr, T> result;
-
+  std::coroutine_handle<> prev_hdl{};
+  /**
+   * @brief Tasks are lazy, so they are not ready when they are first awaited.
+   *
+   * @return std::suspend_always
+   */
+  std::suspend_always initial_suspend() const noexcept { return {}; }
+  /**
+   * @brief To reserve the coroutine state, or otherwise the coroutine is
+   * destroyed before its result is got.
+   *
+   * @return std::suspend_always
+   */
+  FinalAwaiter final_suspend() const noexcept { return {prev_hdl}; }
+  /**
+   * @brief An awaiter needs no transformation.
+   * @return A The very same awaiter.
+   */
+  template <concepts::Awaiter A> A await_transform(A &&a) const noexcept {
+    return std::forward<A>(a);
+  }
+  /**
+   * @brief Transform a task to an awaiter. Once a task is awaited, it is no
+   * more needed(because its result becomes the value of the await epression),
+   * so it is moved into the awaiter.
+   *
+   */
+  template <typename U> TaskAwaiter<U> await_transform(Task<U> &t) noexcept {
+    auto task{std::move(t)};
+    task.co_hdl.promise().prev_hdl =
+        std::coroutine_handle<TaskPromise<T>>::from_promise(*this);
+    return TaskAwaiter<U>{std::move(task)};
+  }
+  /**
+   * @brief The same as above, but for rvalue reference.
+   *
+   */
+  template <typename U> TaskAwaiter<U> await_transform(Task<U> &&t) noexcept {
+    auto task{std::move(t)};
+    task.co_hdl.promise().prev_hdl =
+        std::coroutine_handle<TaskPromise<T>>::from_promise(*this);
+    return TaskAwaiter<U>{std::move(task)};
+  }
   Task<T> get_return_object() {
     return Task<T>{std::coroutine_handle<TaskPromise>::from_promise(*this)};
   }

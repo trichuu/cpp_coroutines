@@ -153,11 +153,11 @@ public:
    * @return The result of the task or throw the exception happend within the
    * task.
    */
-  T wait() {
+  T& wait() {
     while (!this->co_hdl.done()) {
       this->co_hdl.resume();
     }
-    return std::move(this->co_hdl.promise().get());
+    return this->co_hdl.promise().get();
   }
 
   template <typename F> Task<std::invoke_result_t<F, T &>> then(F f) {
@@ -332,12 +332,12 @@ template <typename T> struct TaskPromise {
    * @brief Get the result or throw the exception happend in the coroutine.
    * @return T
    */
-  T get() {
+  T& get() {
     if (this->result.index() == 0 &&
         std::get<std::exception_ptr>(this->result)) {
       std::rethrow_exception(std::get<std::exception_ptr>(this->result));
     }
-    return std::move(std::get<T>(this->result));
+    return std::get<T>(this->result);
   }
 };
 

@@ -112,6 +112,7 @@ public:
       ff();
     }(std::move(*this), std::move(f));
   }
+  std::coroutine_handle<promise_type> raw_handle() { return this->co_hdl; }
 
 private:
   THandle co_hdl;
@@ -153,7 +154,7 @@ public:
    * @return The result of the task or throw the exception happend within the
    * task.
    */
-  T& wait() {
+  T &wait() {
     while (!this->co_hdl.done()) {
       this->co_hdl.resume();
     }
@@ -187,6 +188,7 @@ public:
       ff();
     }(std::move(*this), std::move(f));
   }
+  std::coroutine_handle<promise_type> raw_handle() { return this->co_hdl; }
 
 public:
   THandle co_hdl;
@@ -332,7 +334,7 @@ template <typename T> struct TaskPromise {
    * @brief Get the result or throw the exception happend in the coroutine.
    * @return T
    */
-  T& get() {
+  T &get() {
     if (this->result.index() == 0 &&
         std::get<std::exception_ptr>(this->result)) {
       std::rethrow_exception(std::get<std::exception_ptr>(this->result));

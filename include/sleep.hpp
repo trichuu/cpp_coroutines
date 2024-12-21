@@ -1,9 +1,9 @@
-#ifndef COCOS_SLEEP
-#define COCOS_SLEEP
+#ifndef COROS_SLEEP
+#define COROS_SLEEP
 #include "eventloop.hpp"
 #include <chrono>
 #include <coroutine>
-namespace cocos {
+namespace coros {
     inline TimePoint now() { return std::chrono::steady_clock::now(); }
     struct Sleep {
         std::chrono::time_point<std::chrono::steady_clock> awake_time;
@@ -44,4 +44,4 @@ namespace cocos {
         return sleep_until(now() + duration);
     }
 }
-#endif // COCOS_SLEEP
+#endif // COROS_SLEEP

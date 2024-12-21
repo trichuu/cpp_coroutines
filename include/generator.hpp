@@ -1,12 +1,12 @@
-#ifndef COCOS_GENERATOR
-#define COCOS_GENERATOR
+#ifndef COROS_GENERATOR
+#define COROS_GENERATOR
 #include <coroutine>
 #include <exception>
 #include <ranges>
 #include <utility>
 #include <variant>
 #include <optional>
-namespace cocos {
+namespace coros {
 template <typename T> class Generator;
 
 template <typename T> struct GeneratorPromise {
@@ -257,5 +257,5 @@ public:
 private:
   std::coroutine_handle<promise_type> co_handle;
 };
-} // namespace cocos
-#endif // COCOS_GENERATOR
+} // namespace coros
+#endif // COROS_GENERATOR

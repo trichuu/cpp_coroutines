@@ -1,12 +1,12 @@
-#ifndef COCOS_EVENTLOOP
-#define COCOS_EVENTLOOP
+#ifndef COROS_EVENTLOOP
+#define COROS_EVENTLOOP
 #include <chrono>
 #include <coroutine>
 #include <deque>
 #include <queue>
 #include <thread>
 
-namespace cocos {
+namespace coros {
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 using Duration = std::chrono::duration<long long>;
 
@@ -84,5 +84,5 @@ public:
     return instance;
   }
 };
-} // namespace cocos
-#endif // COCOS_EVENTLOOP
+} // namespace coros
+#endif // COROS_EVENTLOOP

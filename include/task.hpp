@@ -1,5 +1,5 @@
-#ifndef COCOS_TASK
-#define COCOS_TASK
+#ifndef COROS_TASK
+#define COROS_TASK
 #include "coroutine_concepts.hpp"
 #include "eventloop.hpp"
 #include <algorithm>
@@ -9,7 +9,7 @@
 #include <utility>
 #include <variant>
 
-namespace cocos {
+namespace coros {
 template <typename T = void> struct TaskPromise;
 template <typename T = void> class Task;
 template <typename T> struct TaskAwaiter;
@@ -350,5 +350,5 @@ inline void Task<void>::wait() {
   }
   this->co_hdl.promise().get();
 }
-} // namespace cocos
-#endif // COCOS_TASK
+} // namespace coros
+#endif // COROS_TASK

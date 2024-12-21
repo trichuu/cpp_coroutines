@@ -1,11 +1,11 @@
-#ifndef COCOS_GENERATOR_LEGACY
-#define COCOS_GENERATOR_LEGACY
+#ifndef COROS_GENERATOR_LEGACY
+#define COROS_GENERATOR_LEGACY
 #include <coroutine>
 #include <optional>
 #include <utility>
 #include <ranges>
 
-namespace cocos {
+namespace coros {
 template <typename T> class Generator {
 public:
   struct promise_type {
@@ -229,5 +229,5 @@ public:
     }(std::move(*this), std::move(initial), std::move(f));
   }
 };
-} // namespace cocos
-#endif // COCOS_GENERATOR_LEGACY
+} // namespace coros
+#endif // COROS_GENERATOR_LEGACY

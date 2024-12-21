@@ -1,9 +1,9 @@
-#ifndef COCOS_WHENALL
-#define COCOS_WHENALL
+#ifndef COROS_WHENALL
+#define COROS_WHENALL
 #include "eventloop.hpp"
 #include "task.hpp"
 #include <coroutine>
-namespace cocos {
+namespace coros {
 struct CheckAwaiter {
   std::coroutine_handle<> handle;
   bool await_ready() { return handle.done(); }
@@ -21,6 +21,6 @@ template <typename Iter> Task<void> when_all(Iter begin, Iter end) {
     co_await CheckAwaiter{(*it).raw_handle()};
   }
 }
-} // namespace cocos
+} // namespace coros
 
 #endif

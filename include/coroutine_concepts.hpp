@@ -1,8 +1,8 @@
-#ifndef COCOS_CONCEPTS
-#define COCOS_CONCEPTS
+#ifndef COROS_CONCEPTS
+#define COROS_CONCEPTS
 #include <concepts>
 #include <coroutine>
-namespace cocos::concepts {
+namespace coros::concepts {
 
 namespace detail {
 template <typename T, typename... Types>
@@ -34,5 +34,5 @@ concept Awaitable = Awaiter<A> || requires(A a) {
 } || requires(A a) {
   { operator co_await(static_cast<A &&>(a)) } -> Awaiter;
 };
-} // namespace cocos::concepts
-#endif // COCOS_CONCEPTS
+} // namespace coros::concepts
+#endif // COROS_CONCEPTS
